@@ -1,12 +1,4 @@
-#!/usr/bin/env python
-# coding: utf-8
-
 # In[2]:
-
-
-import pennylane.utils
-from matplotlib import pyplot as plt
-
 import pandas as pd
 import scipy as scp
 
@@ -22,28 +14,17 @@ from pennylane.templates import RandomLayers
 from pennylane import broadcast
 from pennylane import expval, var, device
 
-from mitiq.zne.scaling import fold_global
-from mitiq.zne.inference import RichardsonFactory
-from mitiq.zne.scaling import fold_gates_at_random as folding
-from mitiq.zne.inference import AdaExpFactory
+
 from pennylane.transforms import mitigate_with_zne
-from mitiq.zne import execute_with_zne
-from mitiq.zne.scaling import fold_gates_at_random as folding
-from qiskit.providers.fake_provider import FakeLima
-from qiskit.providers.aer.noise import NoiseModel
+
 
 from ase.build import bulk
 from ase.lattice import FCC
 from pennylane import numpy as np
-from qiskit.providers.fake_provider import FakeLima
 from multiprocessing import pool
 
 from functools import wraps
 from time import time
-
-from qiskit import Aer
-from optimparallel import minimize_parallel
-from qiskit import IBMQ
 
 
 # In[3]:
@@ -136,32 +117,12 @@ class KP:
         self.H = H + np.transpose(np.conjugate(H))
         return self.H[:2**nqbits,:2**nqbits]
 
-       
-kp_instance = KP()
 
-
-kp_instance.lattice()
-
-
-hamiltonian_matrix = kp_instance.Hamilton_GaAs()
-
-
-print("Hamiltonian matrix for GaAs:")
-print(hamiltonian_matrix)
-
-print("Path data:")
-print(kp_instance.data)
-
-
-
-# In[21]:
-
-
+# In[]
 class SSVQE:
     
-    def __init__(self, index=0, ep0=1.5292, delta=0.752, a=5.653, num_qubits=2, verbose=1, npoints_path=15, machine=None, num_layers=2, num_excited=0):
-
-        
+    def __init__(self, index=0, ep0=1.5292, delta=0.752, a=5.653, num_qubits=2, verbose=1, 
+                 npoints_path=15, machine=None, num_layers=2, num_excited=0):        
         
         self.time = []
         self.num_qubits= num_qubits
@@ -176,10 +137,8 @@ class SSVQE:
         self.data = self.HKP.data
         self.machine= machine
         self.num_layers= num_layers
-        self.num_excited= num_excited
-        
-        
-        
+        self.num_excited= num_excited      
+      
         
         self.dev = qml.device("default.qubit", wires = self.num_qubits)
        
@@ -225,50 +184,38 @@ class SSVQE:
         return cost
     
     
-    def run(self, params, max_iterations =1000, conv_tol = 1e-5, n_excited = 1, optimizer = 'Adam', opt_rate = 0.1,method= 'simple',processes=None):
+    def run(self, params, max_iterations =1000, conv_tol = 1e-5, n_excited = 1, optimizer = 'Adam', 
+            opt_rate = 0.1,method= 'simple',processes=None):
         self.n_excited = n_excited
         self.max_iterations = max_iterations
         self.conv_tol = conv_tol
         self.params = params
         
         coeffs, obs_list = qml.pauli.conversion._generalized_pauli_decompose(self.HH)
-        
-        
+                
         obs_groupings = qml.pauli.group_observables(observables=obs_list, grouping_type="qwc", method="rlf")
         print("Number of required measurements after optimization", len(obs_groupings))
         
         
-        H = qml.Hamiltonian(coeffs, obs_list)
-        
-        
+        H = qml.Hamiltonian(coeffs, obs_list)       
         
         eigen,_ = np.linalg.eigh(self.HH)
         energies = np.zeros(2)
-        
-        
+               
         if self.machine == "PennyLane_statevector":
             self.dev = qml.device("default.qubit", wires = self.num_qubits)
         elif self.machine == "PennyLane_simulator":
             self.dev = qml.device("default.mixed", wires = self.num_qubits, shots= 1024)
         elif self.machine == "qasm_Statevector":
             self.dev = qml.device('qiskit.aer', wires=self.num_qubits, backened='aer_simulator_Statevector')
-            
-            
-            
+           
         self.nonoiseDev = qml.device("default.qubit", wires = self.num_qubits)
-        self.nonoisesingle_cost = qml.ExpvalCost(self.ansatz, H , self.nonoiseDev, optimize = True)
-        
-        
-        
-        
-        
-        
-        self.single_cost = qml.ExpvalCost(self.ansatz, H, self.dev, optimize = True)
-        
-        
+        self.nonoisesingle_cost = qml.expval(self.ansatz, H , self.nonoiseDev)    
+           
+        self.single_cost = qml.expval(self.ansatz, H, self.dev)
+                
         self.w = np.arange(2**self.num_qubits, 0, -1)
-        energy_optimized, ind, energies_during_opt = self.optimize(
-            params, optm=optimizer, opt_rate=opt_rate, conv_tol=conv_tol)
+        energy_optimized, ind, energies_during_opt = self.optimize(params, optm=optimizer, opt_rate=opt_rate, conv_tol=conv_tol)
 
         results = {
             'energy_optimized': energy_optimized,
@@ -278,6 +225,7 @@ class SSVQE:
             'convergence_tolerance': self.conv_tol
         }
         return results
+    
     def timing(f):
         @wraps(f)
         def wrap(self,*args,**kw):
@@ -289,6 +237,7 @@ class SSVQE:
             self.time.append({'seconds': dt})
             return result
         return wrap
+    
     @timing
     def optimize(self,params,optm = 'Adam', opt_rate = 0.1, conv_tol = 1e-3):
         self.params = params
@@ -337,7 +286,7 @@ class SSVQE:
             energy_optimized[exc] = self.single_cost(self.params, state_idx = exc)
             
             
-        return enrgy_optimized, i, KP_callback_energies
+        return energy_optimized, i, KP_callback_energies
     
     def optimizers(self, optm, opt_rate, eps=1e-8):
         if optm == 'Adam':
@@ -350,17 +299,21 @@ class SSVQE:
         return opt
     
         
-
-            
-
-
-
-        
-        
+    
 
 
 # In[ ]:
+if __name__=='__main__':
+    num_layers = 5 # number of entangling layers of the ansatz
+    num_qubits = 2 # number of qubits
+    point_path = 1 # number of points in Brillouin Zone path
+    num_excited = num_qubits**2 - 1
 
+    vqe = SSVQE(index=0, num_qubits=num_qubits, num_excited=num_excited, npoints_path=1, machine="PennyLane_statevector")
+    params = np.random.uniform(low=0, high=2*np.pi, size=(num_layers, num_qubits, 3), requires_grad=True) 
+    print('params', params)
+    
+    res = vqe.run(params, max_iterations=1)
 
 
 
