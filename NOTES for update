@@ -1,0 +1,79 @@
+Hi Kaushik,
+
+Here are some notes on how to update your code:
+
+(1) Code Cleanup:
+
+I've cleaned up your code by removing unnecessary elements to improve readability.
+(2) PennyLane Versioning Issues:
+
+The PennyLane version you used is no longer available. Because of newer versions, some functions have changed. The most important change is the deprecation of the ExpValCost function that you used for calculating expectation values. Your code relied heavily on this function.
+(3) Adapting to expval:
+
+PennyLane now uses the expval function instead of ExpValCost. However, expval works differently. This requires adapting your entire code.
+(4) Code Example and Explanation:
+
+Refer to this example for guidance: https://pennylane.ai/qml/demos/tutorial_vqe/
+Explanation of Your Current Code:
+
+(4.1) Optimizer Usage:
+
+Your code called a function named total_cost within the optimizer. This function received several arguments:
+
+self.params: Parameters to be updated by the optimizer.
+prev_energy: The previous energy value (likely used for tracking convergence).
+opt: The optimizer object.
+single_cost: This function evaluated the expectation value for individual initial circuits.
+w: Weights used for the weighted expectation value calculation.
+The total_cost function iterated over different circuits (potentially one for each state in SSVQE) and used a weighted expectation value:
+
+'''Python
+for state_idx in range(2**self.num_qubits):
+    cost += w[state_idx] * single_cost(params, state_idx=state_idx)
+'''
+
+Your self.single_cost function definition used qml.ExpCostVal. This function received:
+self.ansatz: The circuit that takes parameters and applies them to the gates.
+H: The Hamiltonian for calculating the expectation value.
+self.dev: The quantum device used for simulations.
+optimize=True: This argument (likely set to True) indicated that the function was used for optimization.
+(4.2) Necessary Code Changes:
+
+Since PennyLane no longer has ExpValCost, the entire logic needs to be adjusted to use expval.
+(4.3) PennyLane Example with expval:
+
+'''Python
+@qml.qnode(dev)
+def circuit(param, wires):
+    qml.BasisState(hf, wires=wires)  # Initial state
+    qml.DoubleExcitation(param, wires=[0, 1, 2, 3])  # Example operation
+    return qml.expval(H)  # Calculate expectation value of Hamiltonian
+
+def cost_fn(param):
+    return circuit(param, wires=range(qubits))  # Pass parameters to circuit
+'''
+
+(4.4) Refactoring Your Code:
+
+You'll need two separate functions:
+One function to define the circuit (your ansatz). The provided example is just an illustration. Customize it based on your specific circuit design.
+Another function (cost_fn) to calculate the cost and pass it to the optimizer. In the example, cost_fn takes the parameters, passes them to the circuit function that builds the circuit, and returns the expectation value.
+(4.5) Adapting Single-Circuit to Multi-Circuit:
+
+Currently, your code uses a single circuit. You'll need to modify it to:
+Generate all circuits (one for each state).
+Calculate the expectation value for each circuit.
+Perform the weighted sum.
+Return the final cost value.
+(5) Remaining Code Adjustments:
+
+After adapting the cost calculation logic, the rest of your code should function as expected.
+(6) Incremental Development Approach:
+
+I recommend rewriting the code step-by-step. Implement each section, test it, and verify that it works before moving to the next part.
+(7) Limitations and Further Support:
+
+Due to significant changes and my current workload, I can't provide full code assistance. However, I can offer further hints on specific sections as you write them.
+Be aware that this is a new area for me, so my initial code might not be the most optimal approach. This rewrite aims to guide you in the right direction.
+
+
